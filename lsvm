@@ -1,0 +1,12 @@
+#!/bin/sh
+
+if [ -z "$1" ]
+then
+	VBoxManage list vms
+elif [ "$1" = -r ]
+then
+	VBoxManage list runningvms
+else
+	echo "Unrecognized option $1"
+fi
+

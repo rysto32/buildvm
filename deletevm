@@ -1,0 +1,34 @@
+#!/bin/sh
+
+RemoveHostEntry() 
+{
+	local vm
+
+	vm=$1
+	lockf /tmp/dnsmasq-hosts.lck sed -i.bak -e "/$vm/d" /usr/local/etc/dnsmasq/VMs.conf
+        lockf /tmp/conserver.lck sed -i.bak -e "/$vm/d" /usr/local/etc/conserver/VMs.conf
+	# Reload the entries
+	sudo /usr/local/etc/rc.d/dnsmasq restart
+	sudo /usr/local/etc/rc.d/conserver reload
+}
+
+if [ $# != 1 ]
+then
+    echo "Usage: $0 <vm>"
+    exit 1
+fi
+
+vm=$1
+scriptdir=`dirname $(realpath $0)`
+
+. $scriptdir/vm.subr
+
+if vm_running "$1"
+then
+	$scriptdir/killvm $vm
+	sleep 1
+fi
+
+VBoxManage unregistervm $vm --delete || exit 1
+RemoveHostEntry $vm
+

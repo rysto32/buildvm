@@ -1,0 +1,10 @@
+#!/bin/sh
+
+#releases='8.1-RELEASE 8.2-RELEASE 8.3-RELEASE'
+releases='9.0-RELEASE 9.1-RELEASE'
+
+for rel in $releases
+do
+	/home/rstone/vm/buildofficial release/${rel%-RELEASE}.0 $rel /repositories/root/freebsd
+done
+

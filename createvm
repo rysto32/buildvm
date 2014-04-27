@@ -1,0 +1,148 @@
+#!/bin/sh
+
+AddHostEntry() 
+{
+    vm=$1
+    nic=$2
+    mac=$(VBoxManage showvminfo $vm | grep "^NIC $nic.*MAC" | awk '{gsub("[0-9A-F][0-9A-F]","&:",$4); gsub(":,","");print $4}')
+    # Remove it in case its orphan
+    lockf /tmp/dnsmasq-hosts.lck sed -i".bak" -e "/$vm/d" /usr/local/etc/dnsmasq/VMs.conf
+    lockf /tmp/dnsmasq-hosts.lck echo "dhcp-host=$mac,$vm" | tee -a /usr/local/etc/dnsmasq/VMs.conf > /dev/null
+
+    lockf /tmp/conserver.lck sed -i ".bak" -e "/$vm/d" /usr/local/etc/conserver/VMs.conf
+    lockf /tmp/conserver.lck echo "console $vm { include VM; } " | tee -a /usr/local/etc/conserver/VMs.conf > /dev/null
+
+    # Reload the entries
+    sudo /usr/local/etc/rc.d/dnsmasq reload
+    sudo /usr/local/etc/rc.d/conserver reload
+}
+
+memsize="512"
+ncpu=2
+buildtype=official
+arch=amd64
+user=$USER
+swap=none
+unset vmname branch image
+
+while getopts "b:i:n:N:m:M:S:t:u:" o
+do
+	case "$o"
+	in
+	b)
+		branch="$OPTARG"
+		;;
+	i)
+		image="$OPTARG"
+		;;
+	M)
+		memsize="$OPTARG"
+		;;
+	m)
+		arch="$OPTARG"
+		;;
+	N)
+		ncpu="$OPTARG"
+		;;
+	n)
+		vmname="$OPTARG"
+		;;
+	S)
+		swap="$OPTARG"
+		;;
+	t)
+		buildtype="$OPTARG"
+		;;
+	u)
+		user="$OPTARG"
+		;;
+	esac
+done
+
+if [ -n "$branch" -a -z "$image" ]
+then
+	if [ "$buildtype" = official ]
+	then
+		image="$(realpath /vmimages/official/$arch/$branch/LATEST)"
+	elif [ "$buildtype" = user ]
+	then
+		image="$(realpath /vmimages/user/$user/$arch/$branch/LATEST)"
+	else
+		echo "Unknown build type $buildtype"
+		exit 1
+	fi
+fi
+
+shift $(($OPTIND - 1))
+OPTIND=1
+
+if [ -n "$1" ]
+then
+	echo "Unrecognized argument $1"
+	exit 1
+fi
+
+if [ ! -f "$image" ]
+then
+	echo "Image $image does not exist"
+	exit 1
+fi
+
+if [ "$arch" = amd64 ]
+then
+	ostype="FreeBSD_64"
+elif [ "$arch" = i386 ]
+then
+	ostype="FreeBSD"
+else
+	echo "Unknown architecture $arch"
+	exit 1
+fi
+
+if ! echo "$swap" | egrep -q '^(auto|none|[0-9]+)$'
+then
+	echo "Unrecognized swap size $swap"
+	exit 1
+fi
+
+if [ "$swap" = auto ]
+then
+	swap=$memsize
+fi
+
+set -e
+VBoxManage createvm --name $vmname --ostype $ostype --basefolder $HOME/.VirtualBox --register
+VBoxManage modifyvm $vmname \
+                    --rtcuseutc on \
+		    --memory $memsize \
+		    --ioapic on \
+		    --pae off \
+		    --hpet on \
+		    --cpus $ncpu \
+		    --firmware bios \
+		    --chipset piix3 \
+		    --boot1 disk \
+		    --nictype1 82545EM \
+		    --nic1 hostonly \
+		    --hostonlyadapter1 vboxnet0 \
+		    --macaddress1 auto \
+		    --uart1 0x3f8 4 \
+		    --uartmode1 server $HOME/.VirtualBox/$vmname/serial.out \
+		    --audio none \
+		    --vrde off \
+		    --usb off \
+		    --accelerate3d off \
+
+mkdir -p $HOME/vmlogs/$vmname
+
+AddHostEntry $vmname 1
+VBoxManage storagectl $vmname --name 0 --hostiocache on --add ide --controller ICH6 --bootable on
+
+VBoxManage convertfromraw $image $HOME/.VirtualBox/$vmname/$vmname.vdi
+VBoxManage storageattach $vmname --storagectl 0 --port 0 --device 0 --type hdd --medium $HOME/.VirtualBox/$vmname/$vmname.vdi
+
+if [ "$swap" != none ]
+then
+	VBoxManage createhd --filename $HOME/.VirtualBox/$vmname/${vmname}-swap.vdi --size $swap
+	VBoxManage storageattach $vmname --storagectl 0 --port 0 --device 1 --type hdd --medium $HOME/.VirtualBox/$vmname/${vmname}-swap.vdi
+fi

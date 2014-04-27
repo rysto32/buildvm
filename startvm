@@ -1,0 +1,25 @@
+#!/bin/sh
+
+for vm in "$@"
+do
+	VBoxHeadless -startvm $vm -v off < /dev/null > /dev/null 2> /dev/null &
+done
+
+waits=0
+for vm in "$@"
+do
+	while [ ! -e "$HOME/.VirtualBox/$vm/serial.out" ]
+	do
+		sleep 1
+		waits=$((waits + 1))
+
+		if [ "$waits" -ge 10 ]
+		then
+			echo "Serial console for VM $vm did not appear; giving up" >&2
+			break
+		fi
+	done
+done
+
+console -z bringup
+

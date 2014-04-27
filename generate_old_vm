@@ -1,0 +1,8 @@
+#!/bin/sh
+
+for day in `jot 7 25`
+do
+	git checkout `git rev-list -n 1 --before=2012-10-${day} master`
+	~rstone/scripts/buildvm head
+done
+

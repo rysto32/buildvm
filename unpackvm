@@ -1,0 +1,11 @@
+#!/bin/sh
+
+zpool list dedup
+md=`mdconfig -a -t vnode -f $1`
+mount /dev/${md}s1a /mnt/md
+
+mkdir `basename $1`
+cp -r /mnt/md `basename $1`
+umount /mnt/md
+mdconfig -d -u $md
+

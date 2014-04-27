@@ -1,0 +1,27 @@
+#!/bin/sh
+
+export PATH="/bin:/sbin:/usr/bin:/usr/sbin:/usr/local/bin:/usr/local/sbin"
+
+branch=$1
+dirname=$2
+repo=$3
+scriptdir=`dirname $0`
+
+set -e
+cd $3
+rm -rf /usr/obj/$3
+git fetch origin
+git clean -fd
+git checkout -f $branch
+git merge --ff-only origin/$branch
+set +e
+
+# work around build bug in old branches -- if timestamp of files is the 
+# same as date it won't build
+sleep 1
+
+for arch in amd64 i386
+do
+	$scriptdir/buildvm -t official -n $dirname -m $arch
+done
+

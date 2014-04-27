@@ -1,0 +1,195 @@
+!/usr/local/bin/bash
+
+set -e
+
+image=""
+memdisk=""
+mountdir=""
+scriptdir=$(dirname $(realpath $0))
+
+cleanup()
+{
+	if [ -n "$mountdir" ]
+	then
+		umount -f $mountdir
+		rm -rf $mountdir
+	fi
+
+	if [ -n "$memdisk" ]
+	then
+		mdconfig -d -u $memdisk
+	fi
+
+	if [ -n "$image" ]
+	then
+		rm -rf $image
+	fi
+}
+
+trap cleanup ERR TERM INT QUIT 
+
+unset buildname
+clean=0
+arch=amd64
+user=$USER
+
+while getopts "m:n:Nt:u:" o
+do
+	case "$o"
+	in
+	m)
+		arch="$OPTARG"
+		;;
+	n)
+		buildname="$OPTARG"
+		;;
+	N)
+		clean="$(($clean + 1))"
+		;;
+	t)
+		buildtype="$OPTARG"
+		;;
+	u)
+		user="$OPTARG"
+		;;
+	esac
+done
+
+if [ "$(id -u)" != 0 ]
+then
+	echo "Script must be run as root"
+	exit 1
+fi
+
+if [ -z "$buildname" ]
+then
+	echo "Usage: $0 [ -t official] -n <buildname>"
+	exit 1
+fi
+
+if [ -z "$buildtype" -o "$buildtype" = user ]
+then
+	builddir="/vmimages/user/$user/$arch/$buildname"
+	mkdir -p $builddir
+
+elif [ "$buildtype" = official ]
+then
+	builddir="/vmimages/official/$arch/$buildname"
+
+	if [ ! -d "$builddir" ]
+	then
+		echo "Build directory for $buildname does not exist"
+		exit 1
+	fi
+else
+	echo "Unknown build type $buildtype"
+	exit 1
+fi
+
+set -e
+
+committime=`git show -s --format='%ct' HEAD`
+commithash=`git show -s --format='%H' HEAD`
+
+commityear=`date -r $committime +%Y`
+commitmonth=`date -r $committime +%m`
+commitday=`date -r $committime +%d`
+
+imagedir="$builddir/$commityear/$commitmonth/$commitday"
+image="$imagedir/$commithash.raw"
+
+mkdir -p $imagedir
+
+if [ -e "$image" ]
+then
+	echo "$image already exists"
+	
+	# Don't remove existing image in cleanup!
+	unset image
+
+	cleanup
+	exit 1
+fi
+
+if [ "$clean" -lt 3 ]
+then
+	if [ "$clean" -ge 1 ]
+	then
+		cleanarg="-DNO_CLEAN"
+	fi
+
+	if [ "$clean" -ge 2 ]
+	then
+		cleanarg="$cleanarg -DKERNFAST"
+	fi
+	make -j32 buildworld buildkernel TARGET_ARCH=$arch __MAKE_CONF=$scriptdir/make.conf $cleanarg
+fi
+
+memdisk=`mdconfig -a -t swap -s 10G`
+
+gpart create -s MBR $memdisk
+gpart add -t freebsd -i 1 $memdisk
+
+gpart create -s BSD ${memdisk}s1
+gpart set -a active -i 1 $memdisk
+gpart add -t freebsd-ufs ${memdisk}s1
+
+suj=""
+if newfs 2>&1 | grep -q -- -j
+then
+	suj="-j"
+fi
+
+newfs -U -L ROOT -U $suj -t /dev/${memdisk}s1a
+
+mountdir=`mktemp -d -t vmimage`
+mount /dev/${memdisk}s1a $mountdir
+
+make installworld installkernel distribution DESTDIR="$mountdir" TARGET_ARCH=$arch __MAKE_CONF=$scriptdir/make.conf
+
+cat - <<EOF > $mountdir/etc/rc.conf
+sshd_enable="YES"
+ifconfig_em0="DHCP"
+sendmail_enable="NONE"
+
+EOF
+
+cat - <<EOF > $mountdir/etc/fstab
+/dev/ufs/ROOT		/		ufs	rw,noatime	1	1
+rstone-server:/usr/home /usr/home	nfs	rw,noatime	0	0
+rstone-server:/usr/obj	/usr/obj	nfs	ro,noatime	0	0
+rstone-server:/repositories /repositories nfs	ro,noatime	0	0
+#/dev/ada1		none		swap	sw		0	0
+
+EOF
+
+cat - << EOF > $mountdir/boot/loader.conf
+console="comconsole,vidconsole"
+comconsole_speed="115200"
+
+virtio_load="YES"
+virtio_pci_load="YES"
+virtio_blk_load="YES"
+if_vtnet_load="YES"
+virtio_balloon_load="YES"
+EOF
+
+sed -i"" -E 's?^ttyu0[[:space:]].*?ttyu0   "/usr/libexec/getty std.115200"   vt102 on secure?' $mountdir/etc/ttys
+
+truncate -s 0 $mountdir/etc/motd
+
+pw -V $mountdir/etc useradd rstone -u 1001 -G wheel -s /bin/sh
+mkdir -p $mountdir/usr/home $mountdir/usr/obj $mountdir/repositories
+ln -s usr/home $mountdir/home
+
+cp $mountdir/usr/share/zoneinfo/America/Toronto $mountdir/etc/localtime
+
+gpart bootcode -b $mountdir/boot/mbr $memdisk
+gpart bootcode -b $mountdir/boot/boot ${memdisk}s1
+
+umount $mountdir
+dd if=/dev/$memdisk of=$image bs=1m
+ln -fs $image $builddir/LATEST
+mdconfig -d -u $memdisk
+rm -rf $mountdir
+
