@@ -12,23 +12,28 @@ RemoveHostEntry()
 	sudo /usr/local/etc/rc.d/conserver reload
 }
 
-if [ $# != 1 ]
-then
-    echo "Usage: $0 <vm>"
-    exit 1
-fi
+do_delete()
+{
+	local vm
 
-vm=$1
+	vm=$1
+
+	if vm_running "$vm"
+	then
+		$scriptdir/killvm $vm
+		sleep 1
+	fi
+
+	rm -rf /usr/local/vmrc/vm/$vm || exit 1
+	RemoveHostEntry $vm
+}
+
 scriptdir=`dirname $(realpath $0)`
 
 . $scriptdir/vm.subr
 
-if vm_running "$1"
-then
-	$scriptdir/killvm $vm
-	sleep 1
-fi
-
-VBoxManage unregistervm $vm --delete || exit 1
-RemoveHostEntry $vm
+for v in "$@"
+do
+	do_delete $v
+done
 

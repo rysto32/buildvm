@@ -1,0 +1,24 @@
+#!/bin/sh
+
+scriptdir=$(dirname $(realpath $0))
+repo=/repos/root/builds
+
+echo " \
+	master 		head
+	stable/10
+	releng/10.2
+	releng/10.1
+	releng/10.0 
+	stable/9
+	releng/9.4
+	releng/9.3
+	releng/9.2
+	releng/9.1
+	releng/9.0
+	stable/8
+	releng/8.4" \
+| while read branch name
+do
+	$scriptdir/buildofficial $branch ${name:-$branch} $repo
+done
+

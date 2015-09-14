@@ -3,29 +3,23 @@
 AddHostEntry() 
 {
     vm=$1
-    nic=$2
-    mac=$(VBoxManage showvminfo $vm | grep "^NIC $nic.*MAC" | awk '{gsub("[0-9A-F][0-9A-F]","&:",$4); gsub(":,","");print $4}')
-    # Remove it in case its orphan
-    lockf /tmp/dnsmasq-hosts.lck sed -i".bak" -e "/$vm/d" /usr/local/etc/dnsmasq/VMs.conf
-    lockf /tmp/dnsmasq-hosts.lck echo "dhcp-host=$mac,$vm" | tee -a /usr/local/etc/dnsmasq/VMs.conf > /dev/null
 
     lockf /tmp/conserver.lck sed -i ".bak" -e "/$vm/d" /usr/local/etc/conserver/VMs.conf
     lockf /tmp/conserver.lck echo "console $vm { include VM; } " | tee -a /usr/local/etc/conserver/VMs.conf > /dev/null
 
     # Reload the entries
-    sudo /usr/local/etc/rc.d/dnsmasq reload
     sudo /usr/local/etc/rc.d/conserver reload
 }
 
+scriptdir=$(dirname $(realpath $0))
 memsize="512"
 ncpu=2
 buildtype=official
 arch=amd64
-user=$USER
 swap=none
-unset vmname branch image
+unset vmname branch image user
 
-while getopts "b:i:n:N:m:M:S:t:u:" o
+while getopts "b:C:i:n:N:m:M:S:t:u:" o
 do
 	case "$o"
 	in
@@ -50,9 +44,6 @@ do
 	S)
 		swap="$OPTARG"
 		;;
-	t)
-		buildtype="$OPTARG"
-		;;
 	u)
 		user="$OPTARG"
 		;;
@@ -61,15 +52,11 @@ done
 
 if [ -n "$branch" -a -z "$image" ]
 then
-	if [ "$buildtype" = official ]
+	if [ -z "$user" ]
 	then
 		image="$(realpath /vmimages/official/$arch/$branch/LATEST)"
-	elif [ "$buildtype" = user ]
-	then
-		image="$(realpath /vmimages/user/$user/$arch/$branch/LATEST)"
 	else
-		echo "Unknown build type $buildtype"
-		exit 1
+		image="$(realpath /vmimages/user/$user/$arch/$branch/LATEST)"
 	fi
 fi
 
@@ -110,39 +97,44 @@ then
 	swap=$memsize
 fi
 
-set -e
-VBoxManage createvm --name $vmname --ostype $ostype --basefolder $HOME/.VirtualBox --register
-VBoxManage modifyvm $vmname \
-                    --rtcuseutc on \
-		    --memory $memsize \
-		    --ioapic on \
-		    --pae off \
-		    --hpet on \
-		    --cpus $ncpu \
-		    --firmware bios \
-		    --chipset piix3 \
-		    --boot1 disk \
-		    --nictype1 82545EM \
-		    --nic1 hostonly \
-		    --hostonlyadapter1 vboxnet0 \
-		    --macaddress1 auto \
-		    --uart1 0x3f8 4 \
-		    --uartmode1 server $HOME/.VirtualBox/$vmname/serial.out \
-		    --audio none \
-		    --vrde off \
-		    --usb off \
-		    --accelerate3d off \
-
-mkdir -p $HOME/vmlogs/$vmname
-
-AddHostEntry $vmname 1
-VBoxManage storagectl $vmname --name 0 --hostiocache on --add ide --controller ICH6 --bootable on
-
-VBoxManage convertfromraw $image $HOME/.VirtualBox/$vmname/$vmname.vdi
-VBoxManage storageattach $vmname --storagectl 0 --port 0 --device 0 --type hdd --medium $HOME/.VirtualBox/$vmname/$vmname.vdi
-
-if [ "$swap" != none ]
+if [ -z "$vmname" ]
 then
-	VBoxManage createhd --filename $HOME/.VirtualBox/$vmname/${vmname}-swap.vdi --size $swap
-	VBoxManage storageattach $vmname --storagectl 0 --port 0 --device 1 --type hdd --medium $HOME/.VirtualBox/$vmname/${vmname}-swap.vdi
+	echo "-n option is mandatory" >&2
+	exit 1
 fi
+
+if [ -d /usr/local/vmrc/vm/$vmname ]
+then
+	echo "VM $vmname already exists" >&2
+	exit 1
+fi
+
+if ! expr "$vmname" : "[a-zA-Z0-9\-][a-zA-Z0-9\-]*$" > /dev/null
+then
+	echo "$vmname is not a valid host name" >&2
+	exit 1
+fi
+
+set -e
+
+vmdir=/usr/local/vmrc/vm/$vmname
+mkdir $vmdir
+mac=$(lockf /tmp/dnsmasq.lck $scriptdir/allocate_mac $vmname)
+
+cat - > $vmdir/$vmname.conf <<EOF
+vm_cpus="$ncpu"
+vm_ram="$memsize"
+vm_console="tmux-detached"
+virtio_type="virtio-blk"
+vm_os_type="freebsd"
+vm_dev_type="img"
+vm_dev_layout="mbr"
+
+vm_nic0_mac="$mac"
+EOF
+
+cp $image $vmdir/$vmname.img
+
+#mkdir -p $HOME/vmlogs/$vmname
+#AddHostEntry $vmname 1
+

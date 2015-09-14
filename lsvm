@@ -2,10 +2,17 @@
 
 if [ -z "$1" ]
 then
-	VBoxManage list vms
+	find /usr/local/vmrc/vm -depth 1 -and -user $USER | sed 's|/usr/local/vmrc/vm/||'
 elif [ "$1" = -r ]
 then
-	VBoxManage list runningvms
+	find /dev/vmm -type c -and ! -name vm0 | sed 's|/dev/vmm/||' | \
+	    while read vm
+	do
+		if [ "$(stat -f '%Su' /usr/local/vmrc/vm/$vm)" = "$USER" ]
+		then
+			echo $vm
+		fi
+	done
 else
 	echo "Unrecognized option $1"
 fi

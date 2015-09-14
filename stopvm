@@ -1,7 +1,5 @@
 #!/bin/sh
 
-for vm in "$@"
-do
-	VBoxManage controlvm "$vm" acpipowerbutton
-done
+scriptdir=$(dirname $(realpath $0))
+$scriptdir/killvm "$@"
 

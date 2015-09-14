@@ -2,8 +2,10 @@
 
 for vm in "$@"
 do
-	VBoxHeadless -startvm $vm -v off < /dev/null > /dev/null 2> /dev/null &
+	sudo /usr/local/etc/rc.d/vm onestart $vm
 done
+
+exit 0
 
 waits=0
 for vm in "$@"

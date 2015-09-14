@@ -1,0 +1,4 @@
+#!/bin/sh
+
+sudo tmux attach-session -t $1
+

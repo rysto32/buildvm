@@ -2,6 +2,6 @@
 
 for vm in "$@"
 do
-	VBoxManage controlvm "$vm" poweroff
+	sudo /usr/local/etc/rc.d/vm onestop $vm 
 done
 

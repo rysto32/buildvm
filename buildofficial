@@ -7,6 +7,12 @@ dirname=$2
 repo=$3
 scriptdir=`dirname $0`
 
+if [ -z "$repo" ]
+then
+	echo "Usage: $0 <branch> <name> <repo>" >&2
+	exit 1
+fi
+
 set -e
 cd $3
 rm -rf /usr/obj/$3
@@ -22,6 +28,6 @@ sleep 1
 
 for arch in amd64 i386
 do
-	$scriptdir/buildvm -t official -n $dirname -m $arch
+	$scriptdir/buildvm -t official -b $dirname -m $arch
 done
 

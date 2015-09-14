@@ -1,0 +1,26 @@
+#!/bin/sh
+
+vm=$1
+
+if [ -z "$vm" ]
+then
+	echo "Usage: $0 <vm name>" >&2
+	exit 1
+fi	
+
+while true
+do
+	mac="02:$(jot -r -w '%02x' -s: 5 0 255)"
+
+	if ! grep -sq $mac /usr/local/etc/dnsmasq/VMs.conf
+	then
+		break
+	fi
+done
+
+sed -i".bak" -e "/$vm/d" /usr/local/etc/dnsmasq/VMs.conf
+echo "dhcp-host=$mac,$vm" >> /usr/local/etc/dnsmasq/VMs.conf
+sudo /usr/local/etc/rc.d/dnsmasq restart > /dev/null
+
+echo $mac
+
