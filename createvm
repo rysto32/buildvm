@@ -163,15 +163,6 @@ EOF
 
 cp $image $vmdir/$vmname.img
 
-md=`sudo mdconfig -t vnode $vmdir/$vmname.img`
-tmpdir=`mktemp -d`
-
-sudo mount /dev/${md}s1a $tmpdir
-echo "hostname='$vmname'" | sudo tee -a $tmpdir/etc/rc.conf > /dev/null
-sudo umount $tmpdir
-rmdir $tmpdir
-sudo mdconfig -d -u $md
-
 sudo virsh define $libvirt_tmp
 
 if [ $? != 0 ]
