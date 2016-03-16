@@ -16,6 +16,7 @@ fi
 set -e
 cd $3
 rm -rf /usr/obj/$3
+rm -rf /usr/obj/*/$3
 git fetch origin
 git clean -fd
 git checkout -f $branch
@@ -26,7 +27,7 @@ set +e
 # same as date it won't build
 sleep 1
 
-for arch in amd64 i386
+for arch in i386 amd64
 do
 	$scriptdir/buildvm -t official -b $dirname -m $arch
 done

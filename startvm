@@ -2,7 +2,7 @@
 
 for vm in "$@"
 do
-	sudo /usr/local/etc/rc.d/vm onestart $vm
+	sudo virsh start $vm
 done
 
 exit 0

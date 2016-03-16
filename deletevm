@@ -2,13 +2,14 @@
 
 RemoveHostEntry() 
 {
-	local vm
+	local vm nmdm
 
 	vm=$1
 	lockf /tmp/dnsmasq-hosts.lck sed -i.bak -e "/$vm/d" /usr/local/etc/dnsmasq/VMs.conf
         lockf /tmp/conserver.lck sed -i.bak -e "/$vm/d" /usr/local/etc/conserver/VMs.conf
+        lockf /tmp/nmdm.lck sed -i.bak -r -e "s/^$vm ([0-9]+)\$/<none> \\1/" /usr/vms/nmdm.conf
 	# Reload the entries
-	sudo /usr/local/etc/rc.d/dnsmasq restart
+	#sudo /usr/local/etc/rc.d/dnsmasq restart
 	sudo /usr/local/etc/rc.d/conserver reload
 }
 
@@ -21,9 +22,10 @@ do_delete()
 	if vm_running "$vm"
 	then
 		$scriptdir/killvm $vm
-		sleep 1
+		sleep 10
 	fi
 
+	sudo virsh undefine $vm
 	rm -rf /usr/local/vmrc/vm/$vm || exit 1
 	RemoveHostEntry $vm
 }

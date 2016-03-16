@@ -1,5 +1,8 @@
 #!/bin/sh
 
-scriptdir=$(dirname $(realpath $0))
-$scriptdir/killvm "$@"
+for vm in "$@"
+do
+	#sudo virsh shutdown $vm
+	sudo virsh destroy $vm
+done
 

@@ -5,7 +5,8 @@ AddHostEntry()
     vm=$1
 
     lockf /tmp/conserver.lck sed -i ".bak" -e "/$vm/d" /usr/local/etc/conserver/VMs.conf
-    lockf /tmp/conserver.lck echo "console $vm { include VM; } " | tee -a /usr/local/etc/conserver/VMs.conf > /dev/null
+    echo "console $vm { include nmdm; device /dev/nmdm${2}B; } " | \
+        lockf /tmp/conserver.lck tee -a /usr/local/etc/conserver/VMs.conf > /dev/null
 
     # Reload the entries
     sudo /usr/local/etc/rc.d/conserver reload
@@ -120,21 +121,65 @@ set -e
 vmdir=/usr/local/vmrc/vm/$vmname
 mkdir $vmdir
 mac=$(lockf /tmp/dnsmasq.lck $scriptdir/allocate_mac $vmname)
+nmdm=$(lockf /tmp/nmdm.lck $scriptdir/allocate_nmdm $vmname)
 
-cat - > $vmdir/$vmname.conf <<EOF
-vm_cpus="$ncpu"
-vm_ram="$memsize"
-vm_console="tmux-detached"
-virtio_type="virtio-blk"
-vm_os_type="freebsd"
-vm_dev_type="img"
-vm_dev_layout="mbr"
+libvirt_tmp=`mktemp`
 
-vm_nic0_mac="$mac"
+cat - > $libvirt_tmp <<EOF
+<domain type='bhyve'>
+    <name>$vmname</name>
+    <memory unit='MiB'>$memsize</memory>
+    <currentMemory unit='MiB'>$memsize</currentMemory>
+    <vcpu>$ncpu</vcpu>
+    <os>
+       <type>hvm</type>
+    </os>
+    <features>
+      <apic/>
+      <acpi/>
+    </features>
+    <clock offset='utc'/>
+    <on_poweroff>destroy</on_poweroff>
+    <on_reboot>restart</on_reboot>
+    <on_crash>destroy</on_crash>
+    <devices>
+      <disk type='file'>
+        <driver name='file' type='raw'/>
+        <source file='$vmdir/$vmname.img'/>
+        <target dev='hda' bus='sata'/>
+      </disk>
+      <interface type='bridge'>
+        <model type='virtio'/>
+        <source bridge="bridge1"/>
+        <mac address='$mac' />
+      </interface>
+      <console type='nmdm'>
+      <source master='/dev/nmdm${nmdm}A' slave='/dev/nmdm${nmdm}B'/>
+      <target type='serial' port='0'/>
+    </console>
+    </devices>
+</domain>
 EOF
 
 cp $image $vmdir/$vmname.img
 
-#mkdir -p $HOME/vmlogs/$vmname
-#AddHostEntry $vmname 1
+md=`sudo mdconfig -t vnode $vmdir/$vmname.img`
+tmpdir=`mktemp -d`
+
+sudo mount /dev/${md}s1a $tmpdir
+echo "hostname='$vmname'" | sudo tee -a $tmpdir/etc/rc.conf > /dev/null
+sudo umount $tmpdir
+rmdir $tmpdir
+sudo mdconfig -d -u $md
+
+sudo virsh define $libvirt_tmp
+
+if [ $? != 0 ]
+then
+	exit 1
+fi
+
+rm $libvirt_tmp
+mkdir -p /var/log/vmlogs/$vmname
+AddHostEntry $vmname ${nmdm}
 

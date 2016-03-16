@@ -2,6 +2,6 @@
 
 for vm in "$@"
 do
-	sudo /usr/local/etc/rc.d/vm onestop $vm 
+	sudo virsh destroy $vm 
 done
 
