@@ -32,7 +32,7 @@ trap cleanup TERM INT QUIT
 arch=amd64
 unset buildname
 kernconf=GENERIC
-size=10G
+size=8G
 unset worldclean
 unset kernclean
 
@@ -101,12 +101,7 @@ then
 elif [ "$buildtype" = official ]
 then
 	builddir="/vmimages/official/$arch/$buildname"
-
-	if [ ! -d "$builddir" ]
-	then
-		echo "Build directory for $buildname does not exist"
-		exit 1
-	fi
+	mkdir -p $builddir
 else
 	echo "Unknown build type $buildtype"
 	exit 1
@@ -190,6 +185,9 @@ virtio_pci_load="YES"
 virtio_blk_load="YES"
 if_vtnet_load="YES"
 virtio_balloon_load="YES"
+
+debug.kdb.alt_break_to_debugger=1
+
 EOF
 
 sudo sed -i"" -E 's?^ttyu0[[:space:]].*?ttyu0   "/usr/libexec/getty 3wire.115200"   vt102 on secure?' $mountdir/etc/ttys
@@ -201,7 +199,6 @@ sudo pw -V $mountdir/etc usermod root -s /bin/sh
 sudo mkdir -p $mountdir/usr/home $mountdir/usr/obj $mountdir/repos
 sudo ln -s usr/home $mountdir/home
 
-sudo touch $mountdir/etc/wall_cmos_clock
 sudo cp $mountdir/usr/share/zoneinfo/America/Toronto $mountdir/etc/localtime
 
 sudo gpart bootcode -b $mountdir/boot/mbr $memdisk
