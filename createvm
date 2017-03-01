@@ -1,5 +1,10 @@
 #!/bin/sh
 
+is_numeric()
+{
+	echo "$1" | egrep -qs '^[0-9]+$'
+}
+
 AddHostEntry() 
 {
     vm=$1
@@ -90,6 +95,18 @@ fi
 if ! echo "$swap" | egrep -q '^(auto|none|[0-9]+)$'
 then
 	echo "Unrecognized swap size $swap"
+	exit 1
+fi
+
+if ! is_numeric $memsize
+then
+	echo "-m requires an integer"
+	exit 1
+fi
+
+if ! is_numeric $ncpu
+then
+	echo "-N requires an integer"
 	exit 1
 fi
 
