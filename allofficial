@@ -5,7 +5,10 @@ repo=/repos/root/builds
 
 echo " \
 	master 		head
+	stable/11
+	releng/11.0
 	stable/10
+	releng/10.3
 	releng/10.2
 	releng/10.1
 	releng/10.0 
