@@ -61,8 +61,16 @@ then
 	if [ -z "$user" ]
 	then
 		image="$(realpath /vmimages/official/$arch/$branch/LATEST)"
+		type="Official"
 	else
 		image="$(realpath /vmimages/user/$user/$arch/$branch/LATEST)"
+		type="User"
+	fi
+
+	if [ -z "$image" ]
+	then
+		echo "$type branch $branch does not exist"
+		exit 1
 	fi
 fi
 
