@@ -1,5 +1,11 @@
 #!/bin/sh
 
+cleanup()
+{
+	sudo umount -f $mountdir
+	sudo mdconfig -d -u $memdisk
+}
+
 set -e
 
 image=""
@@ -155,7 +161,7 @@ sudo newfs -U -L ROOT -U $suj -t /dev/${memdisk}s1a
 mountdir=`mktemp -d -t vmimage`
 sudo mount /dev/${memdisk}s1a $mountdir
 
-sudo make installworld installkernel distribution DESTDIR="$mountdir" TARGET_ARCH=$arch __MAKE_CONF=$scriptdir/make.conf KERNCONF=$kernconf
+sudo make installworld installkernel distribution DESTDIR="$mountdir" TARGET_ARCH=$arch __MAKE_CONF=$scriptdir/make.conf KERNCONF=$kernconf WITHOUT_DEBUG_FILES=yes || cleanup
 
 sudo cp $scriptdir/make.conf $mountdir/etc
 sudo cp $scriptdir/src.conf $mountdir/etc
